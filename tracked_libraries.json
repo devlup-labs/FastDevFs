@@ -48,10 +48,16 @@
     "stripe", "@stripe/stripe-js", "@stripe/react-stripe-js", "braintree", "paypal-rest-sdk", "mollie", "razorpay", "square",
     "leaflet", "react-leaflet", "mapbox-gl", "@mapbox/mapbox-gl-js", "@googlemaps/js-api-loader", "deck.gl", "openlayers", "react-map-gl",
     "react-native", "@react-native-community/netinfo", "expo", "@expo/vector-icons", "react-native-reanimated", "react-native-gesture-handler", "react-native-navigation", "capacitor", "@capacitor/core", "ionic", "nativescript",
-    "electron", "@electron/remote", "electron-store", "@tauri-apps/api", "neutralino",
-    "my-component","helper","readme",
-    "webpack.config","deploy",
-    "seed","scratch",
-    "output","old-stuff","node_modules"
-    ]
+    "electron", "@electron/remote", "electron-store", "@tauri-apps/api", "neutralino"
+,
+    "my-component",
+    "helper",
+    "readme",
+    "webpack.config",
+    "deploy",
+    "seed",
+    "scratch",
+    "output",
+    "old-stuff",
+    "project"]
 }

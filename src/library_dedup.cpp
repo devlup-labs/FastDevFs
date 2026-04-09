@@ -333,6 +333,24 @@ static void do_node_share(int target_folder_idx, int canonical_folder_idx) {
     dedup_link(target_folder_idx, canonical_folder_idx, *file1);
 }
 
+// Check if folder_path is inside a known dependency container directory.
+// Returns true for paths like "/projectA/node_modules/lodash" but NOT
+// for "/projectA" or "/projectA/node_modules" itself.
+static bool is_inside_dependency_container(const std::string& path) {
+    // Known dependency container directory names
+    static const char* containers[] = {
+        "/node_modules/", "/vendor/", "/.venv/", "/venv/",
+        "/__pycache__/", "/bower_components/", "/.gradle/",
+        "/target/debug/", "/target/release/", "/site-packages/",
+        "/gems/", "/pkg/", "/Pods/",
+        nullptr
+    };
+    for (int i = 0; containers[i]; i++) {
+        if (path.find(containers[i]) != std::string::npos) return true;
+    }
+    return false;
+}
+
 void evaluate_and_deduplicate_library_folder(int folder_idx) {
     if (!file1) return;
 
@@ -344,6 +362,11 @@ void evaluate_and_deduplicate_library_folder(int folder_idx) {
         if (node.isdeleted || !S_ISDIR(node.metadata.mode)) return;
         folder_path = node.metadata.name;
     }
+
+    // Only evaluate folders that are inside a known dependency container
+    // (e.g., /proj/node_modules/lodash). Skip arbitrary user directories
+    // like /projectA or even the container itself (/proj/node_modules).
+    if (!is_inside_dependency_container(folder_path)) return;
 
     if (!check_model_is_library(folder_path)) return;
 

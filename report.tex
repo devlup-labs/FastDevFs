@@ -1,0 +1,1332 @@
+\documentclass[12pt, a4paper]{article}
+
+% ============================================================
+% Packages
+% ============================================================
+\usepackage[margin=1in]{geometry}
+\usepackage{libertine}                  % Libertinus Serif
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{
+  shapes.geometric,
+  arrows.meta,
+  positioning,
+  fit,
+  calc,
+  decorations.pathreplacing,
+  backgrounds,
+  matrix
+}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{longtable}
+
+% ============================================================
+% Colour Palette
+% ============================================================
+\definecolor{fastblue}{HTML}{1565C0}
+\definecolor{fastgreen}{HTML}{2E7D32}
+\definecolor{fastorange}{HTML}{E65100}
+\definecolor{fastred}{HTML}{C62828}
+\definecolor{fastpurple}{HTML}{6A1B9A}
+\definecolor{lightblue}{HTML}{E3F2FD}
+\definecolor{lightgreen}{HTML}{E8F5E9}
+\definecolor{lightorange}{HTML}{FFF3E0}
+\definecolor{lightyellow}{HTML}{FFFDE7}
+\definecolor{lightpurple}{HTML}{F3E5F5}
+\definecolor{lightred}{HTML}{FFEBEE}
+\definecolor{codebg}{HTML}{F5F5F5}
+
+% ============================================================
+% Heading style (rule beneath headings)
+% ============================================================
+\titleformat{\section}
+  {\Large\bfseries}{\thesection.}{0.5em}{}[\vspace{-0.6em}\rule{\textwidth}{0.5pt}]
+\titleformat{\subsection}
+  {\large\bfseries}{\thesubsection.}{0.5em}{}[\vspace{-0.6em}\rule{\textwidth}{0.3pt}]
+\titleformat{\subsubsection}
+  {\normalsize\bfseries}{\thesubsubsection.}{0.5em}{}
+
+% ============================================================
+% Listings style
+% ============================================================
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{gray!40},
+  breaklines=true,
+  captionpos=b,
+  tabsize=2,
+  columns=flexible,
+  showstringspaces=false,
+  keywordstyle=\color{fastblue}\bfseries,
+  commentstyle=\color{fastgreen}\itshape,
+  stringstyle=\color{fastorange},
+}
+
+% ============================================================
+% Hyperref setup
+% ============================================================
+\hypersetup{
+  colorlinks=true,
+  linkcolor=fastblue,
+  urlcolor=fastblue,
+  citecolor=fastblue,
+}
+
+% ============================================================
+% TikZ Styles
+% ============================================================
+\tikzset{
+  component/.style={
+    rectangle, draw=#1, fill=#1!10, rounded corners=4pt,
+    minimum width=3.2cm, minimum height=1cm,
+    font=\small\bfseries, text centered, line width=0.8pt
+  },
+  component/.default=fastblue,
+  process/.style={
+    rectangle, draw=fastblue, fill=lightblue, rounded corners=3pt,
+    minimum width=2.8cm, minimum height=0.9cm,
+    font=\small, text centered, line width=0.6pt
+  },
+  datastore/.style={
+    cylinder, draw=fastgreen, fill=lightgreen,
+    shape border rotate=90, aspect=0.25,
+    minimum width=2.5cm, minimum height=1cm,
+    font=\small\bfseries, text centered, line width=0.8pt
+  },
+  arrow/.style={-{Stealth[length=6pt]}, line width=0.7pt},
+  dasharrow/.style={-{Stealth[length=6pt]}, dashed, line width=0.6pt},
+  brace/.style={decorate, decoration={brace, amplitude=6pt, raise=2pt}},
+}
+
+% ============================================================
+\begin{document}
+
+% ============================================================
+% TITLE PAGE
+% ============================================================
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+
+{\Huge\bfseries Final Evaluation Report}\\[0.8em]
+{\LARGE\bfseries FastDevFS}\\[0.4em]
+{\Large\bfseries Winter of Code 2026}\\[2em]
+{\large Mentor: Devesh Bhardwaj}\\[4em]
+
+\vfill
+\end{titlepage}
+
+% ============================================================
+% TABLE OF CONTENTS
+% ============================================================
+\tableofcontents
+\newpage
+
+% ============================================================
+% 1. INTRODUCTION
+% ============================================================
+\section{Introduction}
+
+\subsection{Problem with Current File Systems}
+
+The problems that every developer faces with current file systems are:
+
+\begin{itemize}
+  \item \textbf{Disk Space Bloat:} A single \texttt{node\_modules} folder can contain 50,000+ files and consume 1--2\,GB. Multiply this by 10 projects, and the same files are stored repeatedly.
+  \item \textbf{I/O Bottlenecks:} Build tools like webpack, cargo, and make spend most of their time performing I/O, not compiling. They issue millions of \texttt{stat()} calls which are slow on traditional disk-based filesystems.
+  \item \textbf{Siloed Solutions:} \texttt{npm} is a brilliant solution for Node.js, but it does not solve the problem for Rust \texttt{target/} folders, Python \texttt{venv/} directories, or C++ object files.
+\end{itemize}
+
+\subsection{Solution}
+
+\textbf{FastDevFS} is a high-performance virtual filesystem (VFS) designed to solve the above problems. It is a ``smart'' filesystem layer, written in C++17, that you mount over your development directory. It transparently intercepts all file operations to provide:
+
+\begin{itemize}
+  \item \textbf{Instant Metadata Lookups:} An in-memory cache for directory structures, eliminating the ``stat storm'' from build tools.
+  \item \textbf{Transparent De-duplication:} Stores files based on their content hash, not their path. If 10 projects use the same version of React, it is stored physically once.
+  \item \textbf{Intelligent Library Detection:} A two-tier detection system (binary search + MLP neural network) automatically identifies library/dependency directories across all ecosystems.
+  \item \textbf{Folder-Level Node Sharing:} Entire duplicate library directories share a single physical tree structure with copy-on-write semantics.
+\end{itemize}
+
+\subsection{How FastDevFS Targets Developers}
+
+FastDevFS specifically targets software developers who maintain multiple projects:
+
+\begin{enumerate}
+  \item \textbf{Reduces Bloating:} By deduplicating identical files across projects at the filesystem level, disk usage is reduced by 40--70\% for typical multi-project workspaces.
+  \item \textbf{Makes Build Systems Faster:} The $O(1)$ hash-based metadata lookup means tools like \texttt{make}, \texttt{webpack}, and \texttt{cargo} get near-instant \texttt{stat()}/\texttt{getattr()} responses instead of waiting for kernel-to-disk round trips.
+  \item \textbf{Language Agnostic:} Unlike \texttt{pnpm} (Node-only) or Cargo caches (Rust-only), FastDevFS operates at the filesystem layer and works across Node.js, Python, Rust, C++, Go, Ruby, and any other ecosystem.
+\end{enumerate}
+
+% ============================================================
+% 2. OBJECTIVES
+% ============================================================
+\section{Objectives}
+
+\subsection{To Reduce Duplicate Files}
+
+The primary objective of FastDevFS is to \textbf{eliminate redundant storage} caused by duplicate files across multiple development projects. Modern development environments often contain repeated dependencies, build artifacts, and package directories.
+
+FastDevFS aims to:
+\begin{itemize}
+  \item Detect identical file contents using SHA-256 content hashing.
+  \item Store duplicate data only once via hard-linking to a canonical copy.
+  \item Maintain consistency across multiple projects referencing the same files.
+  \item Reduce overall disk usage by 40--70\% for typical developer workspaces.
+\end{itemize}
+
+\subsection{To Make Faster Build Systems}
+
+Another major objective is to improve the performance of development workflows by reducing metadata access latency. Modern build systems perform millions of filesystem operations---especially metadata queries like file existence checks and directory traversals.
+
+FastDevFS improves build performance by:
+\begin{itemize}
+  \item Maintaining all metadata in a memory-mapped tree structure.
+  \item Providing $O(1)$ path resolution via polynomial hash-based indexing.
+  \item Eliminating kernel-to-disk round trips for metadata operations.
+  \item Reducing I/O bottlenecks during build processes.
+\end{itemize}
+
+The solution is language-agnostic, working across Node.js, Rust, Python, C++, and all other ecosystems.
+
+% ============================================================
+% 3. ARCHITECTURE
+% ============================================================
+\section{Architecture}
+\label{sec:arch}
+
+\subsection{System Overview}
+
+The following diagram shows the complete architecture from user application down to physical storage:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.9cm,
+  every node/.style={font=\small},
+  layer/.style={rectangle, draw, rounded corners=3pt, minimum width=12cm, minimum height=1cm, text centered, line width=0.7pt},
+]
+
+% Layers (top to bottom)
+\node[layer, fill=lightred, draw=fastred] (app) {\textbf{User Applications} (ls, cp, make, webpack, npm, cargo, etc.)};
+\node[layer, fill=lightorange, draw=fastorange, below=of app] (vfs) {\textbf{Linux Kernel VFS Layer} (Virtual File System switch)};
+\node[layer, fill=lightyellow, draw=fastorange!80, below=of vfs] (fuse) {\textbf{FUSE Kernel Module} (\texttt{/dev/fuse})};
+
+\node[layer, fill=lightblue, draw=fastblue, below=1.2cm of fuse, minimum height=1.5cm] (fdfs) {
+  \textbf{FastDevFS Daemon} (Low-Level FUSE Callbacks)
+};
+
+% Sub-components inside daemon
+\node[rectangle, draw=fastblue!60, fill=lightblue!50, rounded corners=2pt, minimum width=2.4cm, minimum height=0.7cm, font=\scriptsize\bfseries, below=1.8cm of fuse, xshift=-4cm] (tree) {Tree ADT};
+\node[rectangle, draw=fastblue!60, fill=lightblue!50, rounded corners=2pt, minimum width=2.4cm, minimum height=0.7cm, font=\scriptsize\bfseries, right=0.3cm of tree] (hash) {Hash Map};
+\node[rectangle, draw=fastblue!60, fill=lightblue!50, rounded corners=2pt, minimum width=2.4cm, minimum height=0.7cm, font=\scriptsize\bfseries, right=0.3cm of hash] (dedup) {Dedup Engine};
+\node[rectangle, draw=fastblue!60, fill=lightblue!50, rounded corners=2pt, minimum width=2.4cm, minimum height=0.7cm, font=\scriptsize\bfseries, right=0.3cm of dedup] (libdet) {Lib Detector};
+
+% Storage
+\node[layer, fill=lightgreen, draw=fastgreen, below=1.5cm of fdfs, minimum height=1cm] (storage) {
+  \textbf{Persistent Storage} (mmap Files + Host-FS Data Directory)
+};
+
+% CLI tool (right side)
+\node[rectangle, draw=fastpurple, fill=lightpurple, rounded corners=3pt, minimum width=2.8cm, minimum height=1.3cm, font=\small\bfseries, text centered, right=0.8cm of fdfs] (cli) {CLI Tool\\{\scriptsize\texttt{fastdevfs-cli}}};
+
+% IPC connection
+\node[rectangle, draw=fastorange!80, fill=lightorange, rounded corners=2pt, minimum width=2cm, minimum height=0.6cm, font=\scriptsize\bfseries, below=0.2cm of cli] (ipc) {Unix Socket IPC};
+
+% Arrows
+\draw[arrow] (app) -- (vfs);
+\draw[arrow] (vfs) -- (fuse);
+\draw[arrow] (fuse) -- node[right, font=\scriptsize]{\texttt{/dev/fuse}} (fdfs);
+\draw[arrow] (fdfs) -- (storage);
+\draw[arrow, fastpurple] (cli) -- (ipc);
+\draw[arrow, fastpurple] (ipc) -| ([xshift=3cm]fdfs.south east) -- (fdfs.east);
+
+% Background for kernel space
+\begin{scope}[on background layer]
+  \node[fit=(vfs)(fuse), fill=red!3, draw=red!20, rounded corners=6pt, inner sep=8pt, label={[font=\scriptsize\itshape, text=fastred]above right:Kernel Space}] {};
+  \node[fit=(fdfs)(tree)(hash)(dedup)(libdet), fill=blue!3, draw=blue!15, rounded corners=6pt, inner sep=8pt, label={[font=\scriptsize\itshape, text=fastblue]above right:User Space}] {};
+\end{scope}
+
+\end{tikzpicture}
+\caption{High-level FastDevFS architecture showing the FUSE-based design, internal components, and CLI tool with Unix socket IPC.}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{Directory Tree Architecture}
+
+FastDevFS stores all metadata in a flat array of \texttt{treenode} structures (100,000 nodes), with tree relationships maintained through index-based pointers. The array is directly memory-mapped from disk for zero-copy persistence.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.8cm,
+  box/.style={rectangle, draw, rounded corners=2pt, minimum width=2.6cm, minimum height=1cm, font=\scriptsize, text centered, line width=0.6pt},
+  freenode/.style={box, fill=lightyellow, draw=fastorange!70},
+  activenode/.style={box, fill=lightblue, draw=fastblue},
+  treenode/.style={box, fill=lightgreen, draw=fastgreen, minimum width=2cm},
+]
+
+% Physical Array (left side)
+\node[font=\small\bfseries] at (0, 1) {DirNode Array (Physical)};
+
+\node[activenode] (a0) at (0, 0) {Index 0\\in\_use: true\\inode: 2};
+\node[activenode, below=0.4cm of a0] (a1) {Index 1\\in\_use: true\\inode: 3};
+\node[font=\large, below=0.2cm of a1] (dots1) {$\vdots$};
+\node[freenode, below=0.2cm of dots1] (f1) {Index 248\\in\_use: false\\next\_free: 901};
+\node[activenode, below=0.4cm of f1] (a2) {Index 249\\in\_use: true\\inode: 9};
+\node[font=\large, below=0.2cm of a2] (dots2) {$\vdots$};
+\node[freenode, below=0.2cm of dots2] (f2) {Index 901\\in\_use: false\\next\_free: $-1$};
+
+% Free list arrow
+\draw[-{Stealth}, fastorange, thick] (f1.east) -- ++(1.2,0) |- (f2.east);
+\node[font=\scriptsize, fastorange] at (2.2, -3.3) {free\_list chain};
+
+% Logical Tree (right side)
+\node[font=\small\bfseries] at (7.5, 1) {Logical Hierarchy};
+
+\node[treenode] (root) at (7.5, 0) {Root (\texttt{/})\\idx: 0};
+\node[treenode, below left=1.2cm and 0.3cm of root] (p1) {project1/\\idx: 1};
+\node[treenode, below right=1.2cm and 0.3cm of root] (p2) {project2/\\idx: 249};
+
+% Tree pointers
+\draw[-{Stealth}, fastblue, thick] (root.south) -- (p1.north) node[midway, left, font=\scriptsize]{first\_child};
+\draw[-{Stealth}, fastred!80, thick] (p1.east) -- (p2.west) node[midway, above, font=\scriptsize]{next\_sibling};
+
+% Dashed mapping
+\draw[dashed, gray] (a0.east) -- (root.west);
+\draw[dashed, gray] (a1.east) -- (p1.north west);
+\draw[dashed, gray] (a2.east) -- (p2.south west);
+
+\end{tikzpicture}
+\caption{Physical array storage with free-list management (left) mapped to the logical directory hierarchy (right). Tree pointers use array indices, enabling direct mmap persistence.}
+\label{fig:dirtree}
+\end{figure}
+
+Each \texttt{treenode} contains:
+\begin{itemize}
+  \item \textbf{Tree pointers:} \texttt{parent}, \texttt{firstchild}, \texttt{nextsibling}, \texttt{prevsibling} (all as array indices)
+  \item \textbf{Metadata:} \texttt{inode}, \texttt{name[300]}, \texttt{mode}, \texttt{uid}, \texttt{gid}, \texttt{size}, \texttt{atime/mtime/ctime}, \texttt{nlink}
+  \item \textbf{Dedup fields:} \texttt{dedup\_source}, \texttt{is\_deduped}, \texttt{dedup\_refcount}
+  \item \textbf{Free-list pointer:} \texttt{nextfree} for $O(1)$ allocation
+\end{itemize}
+
+\subsection{Hash Map Architecture}
+
+The hash table uses open-addressing with polynomial hashing for $O(1)$ path-to-index lookups, stored entirely within the mmap'd region.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  bucket/.style={rectangle, draw, fill=lightgreen, minimum width=1.5cm, minimum height=0.7cm, font=\scriptsize, line width=0.5pt},
+  entry/.style={rectangle, draw, fill=lightorange, rounded corners=2pt, minimum width=3.2cm, minimum height=1cm, font=\scriptsize, text centered, line width=0.5pt},
+]
+
+% Buckets
+\node[font=\small\bfseries] at (0, 1.2) {Buckets};
+\node[bucket] (b0) at (0,0) {b[0]};
+\node[bucket, below=0.3cm of b0] (b1) {b[1]};
+\node[bucket, below=0.3cm of b1] (b2) {b[2]};
+\node[font=\large, below=0.15cm of b2] {$\vdots$};
+
+% Entries
+\node[font=\small\bfseries] at (5, 1.2) {Entries (Open Addressing)};
+\node[entry] (e0) at (5,0) {Entry 0\\key: ``/home/user''\\value: 1};
+\node[entry, below=0.3cm of e0] (e1) {Entry 1\\key: ``/etc/passwd''\\value: 2};
+\node[entry, below=0.3cm of e1] (e2) {Entry 2\\key: ``/dev/null''\\value: 3};
+
+% Pointers
+\draw[arrow, gray] (b0.east) -- (e0.west);
+\draw[arrow, gray] (b2.east) -- (e2.west);
+
+% Linear probe arrow
+\draw[-{Stealth}, fastblue, thick] (e0.south) -- (e1.north) node[right, font=\scriptsize, midway]{linear probe};
+
+% Header
+\node[rectangle, draw, fill=gray!10, minimum width=3.2cm, minimum height=0.8cm, font=\scriptsize, below=0.5cm of e2] {Header: magic = \texttt{0xCAFEBABE}\\capacity: 150,000};
+
+\end{tikzpicture}
+\caption{Hash map using polynomial hashing with open addressing and linear probing. The entire structure lives within the mmap'd region for zero-copy persistence.}
+\label{fig:hashmap}
+\end{figure}
+
+% ============================================================
+% 4. CORE DESIGN --- MAJOR HIGHLIGHTS
+% ============================================================
+\section{Core Design --- Major Highlights}
+
+\subsection{Memory-Mapped Persistence with \texttt{mmap()}}
+
+FastDevFS uses the \texttt{mmap()} system call to map the entire metadata file directly into the process address space. This is the foundation of its performance.
+
+\subsubsection{What \texttt{mmap()} Does}
+
+The \texttt{mmap()} system call creates a mapping between a file on disk and a region of virtual memory:
+\begin{itemize}
+  \item The file's contents become accessible as normal RAM via pointers.
+  \item Changes made in memory are automatically synchronised back to disk by the OS.
+  \item No explicit \texttt{read()}/\texttt{write()} syscalls are needed for metadata access.
+\end{itemize}
+
+\subsubsection{Advantages of \texttt{mmap()} in FastDevFS}
+
+\begin{itemize}
+  \item \textbf{Direct Memory Access:} Tree operations are simple pointer/index manipulations with no serialisation overhead.
+  \item \textbf{Fast Mount/Unmount:} Simply maps the file into memory; metadata is instantly available (the OS loads pages on demand).
+  \item \textbf{Automatic Synchronisation:} The OS tracks modified pages (dirty pages) and writes them back to disk asynchronously.
+  \item \textbf{On-Demand Paging:} Only accessed pages are loaded into physical RAM, so the 18\,GB virtual mapping uses minimal physical memory.
+\end{itemize}
+
+\subsection{Tree-Based Metadata Organisation}
+
+All file and directory metadata is maintained inside a tree structure within the memory-mapped region. The tree uses a \textbf{left-child right-sibling} representation:
+
+\begin{itemize}
+  \item \texttt{firstchild}: Index of the first child node.
+  \item \texttt{nextsibling}/\texttt{prevsibling}: Doubly-linked sibling list for $O(1)$ unlinking.
+  \item \texttt{parent}: Back-pointer for upward traversal.
+\end{itemize}
+
+Node allocation uses a \textbf{hybrid free-list + bump allocator}:
+\begin{enumerate}
+  \item \textbf{Priority:} Pop from the doubly-linked free list ($O(1)$).
+  \item \textbf{Fallback:} Bump-allocate from the high-water mark if free list is empty ($O(1)$).
+\end{enumerate}
+
+\subsection{Hash-Based $O(1)$ Metadata Lookup}
+
+\subsubsection{Motivation}
+
+In a purely tree-based filesystem, locating a file within a directory requires scanning through child entries sequentially:
+$$T_{\text{lookup}} = O(n)$$
+where $n$ is the number of entries in the directory. To reduce this overhead, FastDevFS uses a polynomial hash table to achieve:
+$$T_{\text{lookup}} = O(1) \; \text{(amortised)}$$
+
+\subsubsection{Polynomial Hashing (Polyhash)}
+
+For a string $s = c_1 c_2 c_3 \ldots c_n$, the hash is computed as:
+$$\text{hash}(s) = \sum_{i=1}^{n} c_i \cdot p^{i-1} \pmod{M}$$
+where:
+\begin{itemize}
+  \item $p = 131$ (a prime base, chosen for good distribution)
+  \item $M$ = number of buckets (150,000)
+  \item $c_i$ = numeric value of character $i$
+\end{itemize}
+
+\subsubsection{Hash Table Design}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Property} & \textbf{Value} & \textbf{Rationale} \\
+\midrule
+Collision resolution & Linear probing & Cache-friendly, no pointer chasing \\
+Capacity & 150,000 slots & $\sim$67\% load factor for 100K nodes \\
+Storage & Static allocation & No \texttt{malloc} failures, fits in mmap \\
+Deletion & Rehash on remove & Maintains probe chain integrity \\
+Key size & 300 bytes (full path) & Matches \texttt{name} field in \texttt{treenode} \\
+\bottomrule
+\end{tabular}
+\caption{Hash table design parameters.}
+\end{table}
+
+\subsection{Concurrency Control using Read--Write Locks}
+
+FastDevFS supports concurrent filesystem operations from multiple processes. The directed tree ADT uses a \textbf{recursive read--write mutex} (\texttt{std::recursive\_mutex}) for thread safety:
+
+\begin{itemize}
+  \item \textbf{Multiple concurrent reads:} Operations like \texttt{getattr}, \texttt{readdir}, and \texttt{lookup} acquire shared access.
+  \item \textbf{Exclusive writes:} Operations like \texttt{mkdir}, \texttt{create}, \texttt{unlink}, and \texttt{rmdir} acquire exclusive access.
+  \item \textbf{Prevents race conditions:} Structural corruption of the tree is prevented even under heavy multi-process workloads.
+\end{itemize}
+
+% ============================================================
+% 5. DATA STRUCTURES AND COMPLEXITY ANALYSIS
+% ============================================================
+\section{Data Structures and Complexity Analysis}
+
+This section compares FastDevFS's data structures against traditional filesystems (ext4, Btrfs) to demonstrate the complexity improvements.
+
+\subsection{Comparison with ext4}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{p{3.5cm}p{3.5cm}p{3.5cm}p{3.5cm}}
+\toprule
+\textbf{Operation} & \textbf{ext4} & \textbf{Btrfs} & \textbf{FastDevFS} \\
+\midrule
+File lookup by path & $O(n)$ linear scan per directory (HTree: $O(\log n)$) & $O(\log n)$ B-tree & $O(1)$ hash map \\
+\midrule
+File creation & $O(n)$ scan + bitmap alloc & $O(\log n)$ B-tree insert & $O(1)$ free-list pop + hash insert \\
+\midrule
+File deletion & $O(n)$ scan + bitmap update & $O(\log n)$ B-tree delete & $O(1)$ hash remove + free-list push \\
+\midrule
+Sibling unlink & $O(n)$ scan for prev & $O(\log n)$ & $O(1)$ doubly-linked list \\
+\midrule
+Metadata read (\texttt{stat}) & Disk I/O (inode table) & Disk I/O (B-tree) & Memory access (mmap) \\
+\midrule
+Deduplication & Not supported & Block-level (write-time) & Content-level (SHA-256) + folder-level (node sharing) \\
+\midrule
+Persistence & Direct disk writes & CoW B-tree & \texttt{mmap} + \texttt{msync} \\
+\bottomrule
+\end{tabular}
+\caption{Complexity comparison: FastDevFS vs.\ ext4 vs.\ Btrfs.}
+\label{tab:complexity}
+\end{table}
+
+\subsection{Key Data Structures}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{p{3cm}p{3cm}p{3cm}p{4cm}}
+\toprule
+\textbf{Structure} & \textbf{Type} & \textbf{Complexity} & \textbf{Purpose} \\
+\midrule
+\texttt{treenode[100K]} & Flat array, mmap'd & $O(1)$ indexed access & Filesystem hierarchy storage \\
+\texttt{hashmap\_t} & Open-address hash & $O(1)$ amortised lookup & Path $\to$ tree-index mapping \\
+Free list & Doubly-linked & $O(1)$ alloc/dealloc & Node recycling \\
+\texttt{DedupEntry[150K]} & Open-address hash (FNV-1a) & $O(1)$ lookup/insert & Content hash $\to$ canonical index \\
+\texttt{InodeHashMapping[100K]} & Direct array & $O(1)$ indexed & Tree index $\to$ content hash (reverse map) \\
+\texttt{g\_tracked\_libraries} & Sorted vector & $O(\log n)$ binary search & Known library name lookup \\
+MLP weights & Dense matrices & $O(1)$ per prediction & 4-layer neural network for library detection \\
+\texttt{g\_lib\_catalog} & \texttt{unordered\_map} & $O(1)$ amortised & Folder signature $\to$ canonical folder index \\
+\bottomrule
+\end{tabular}
+\caption{Key data structures in FastDevFS with their complexities.}
+\end{table}
+
+\subsection{The \texttt{treenode} Structure}
+
+\begin{lstlisting}[language=C++, caption={The \texttt{treenode} POD structure (mmap-safe).}]
+struct treenode {
+    int nextfree    = -1;   // Free-list link
+    int firstchild  = -1;   // Left-child pointer
+    int nextsibling = -1;   // Right-sibling pointer
+    int prevsibling = -1;   // Doubly-linked for O(1) unlink
+    int parent      = -1;   // Back pointer
+
+    metadate metadata;      // inode, name[300], mode, uid, gid,
+                            // size, times, nlink, is_library
+
+    bool isdeleted = true;  // Soft-delete flag
+
+    // Folder-level dedup
+    int  dedup_source   = -1;    // Canonical dir index (-1 = self)
+    bool is_deduped     = false; // Shares firstchild with canonical
+    int  dedup_refcount = 1;     // # dirs sharing this child chain
+};
+\end{lstlisting}
+
+\subsection{The \texttt{DedupStore} Structure}
+
+\begin{lstlisting}[language=C++, caption={The persistent dedup index layout.}]
+struct DedupStore {
+    uint32_t         magic;                           // 0xDED0F11E
+    int              policy;                          // DedupPolicy enum
+    DedupEntry       entries[150000];                 // Forward: hash -> canonical
+    InodeHashMapping inode_map[100000];               // Reverse: index -> hash
+};
+\end{lstlisting}
+
+% ============================================================
+% 6. DEDUPLICATION ENGINE
+% ============================================================
+\section{Deduplication Engine}
+
+The deduplication engine is the most significant post-mid-evaluation achievement. It operates at two levels: \textbf{file-level} (content hashing + hard-linking) and \textbf{folder-level} (recursive signatures + node sharing).
+
+\subsection{Dedup Pipeline Overview}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.7cm and 0.8cm,
+  stage/.style={rectangle, draw=fastblue, fill=lightblue, rounded corners=3pt, minimum width=3cm, minimum height=0.9cm, font=\scriptsize\bfseries, text centered, line width=0.6pt},
+  decision/.style={diamond, draw=fastorange, fill=lightorange, minimum width=2cm, minimum height=1cm, font=\scriptsize\bfseries, text centered, aspect=2, line width=0.6pt, inner sep=1pt},
+  result/.style={rectangle, draw=fastgreen, fill=lightgreen, rounded corners=3pt, minimum width=2.4cm, minimum height=0.7cm, font=\scriptsize\bfseries, text centered, line width=0.6pt},
+]
+
+% File-level pipeline
+\node[stage] (write) {FUSE write() / create()};
+\node[stage, below=of write] (notify) {Send DedupRequest\\via Unix Socket};
+\node[stage, below=of notify] (debounce) {Debounce Timer\\(500\,ms coalesce)};
+\node[stage, below=of debounce] (sha) {Compute SHA-256\\of file content};
+\node[decision, below=0.8cm of sha] (lookup) {Hash exists\\in forward\\map?};
+\node[result, below left=1cm and 0.5cm of lookup] (newentry) {Insert as\\new canonical};
+\node[result, below right=1cm and 0.5cm of lookup] (hardlink) {Hard-link to\\canonical copy};
+\node[stage, below=1cm of lookup, yshift=-0.6cm] (reverse) {Update reverse map\\(index $\to$ hash)};
+
+% Arrows
+\draw[arrow] (write) -- (notify);
+\draw[arrow] (notify) -- (debounce);
+\draw[arrow] (debounce) -- (sha);
+\draw[arrow] (sha) -- (lookup);
+\draw[arrow] (lookup) -- node[left, font=\scriptsize]{No} (newentry);
+\draw[arrow] (lookup) -- node[right, font=\scriptsize]{Yes} (hardlink);
+\draw[arrow] (newentry) |- (reverse);
+\draw[arrow] (hardlink) |- (reverse);
+
+% Policy gate
+\node[rectangle, draw=fastred, fill=lightred, rounded corners=2pt, minimum width=2.2cm, font=\scriptsize, right=1.5cm of notify] (policy) {Policy gate:\\check should\_dedup()};
+\draw[dasharrow, fastred] (notify.east) -- (policy.west);
+
+\end{tikzpicture}
+\caption{File-level deduplication pipeline: from FUSE callback through debouncing, hashing, and hard-link creation.}
+\label{fig:dedup-pipeline}
+\end{figure}
+
+\subsection{File-Level Deduplication}
+
+\subsubsection{Content Hashing with SHA-256}
+
+FastDevFS implements FIPS 180-4 compliant SHA-256 with zero external cryptographic dependencies. The streaming API processes files in 8\,KB chunks with constant memory:
+
+\begin{lstlisting}[language=C++]
+SHA256_CTX ctx;
+sha256_init(&ctx);
+while ((n = read(fd, buf, 8192)) > 0)
+    sha256_update(&ctx, buf, n);
+sha256_final(&ctx, hash);   // 32-byte digest -> 64-char hex
+\end{lstlisting}
+
+\subsubsection{Debounce Mechanism}
+
+To avoid redundant hashing when files are written multiple times in quick succession (e.g., during \texttt{npm install}), the dedup server implements a 500\,ms debounce timer:
+
+\begin{enumerate}
+  \item Each file write triggers a \texttt{DedupRequest} sent via Unix datagram socket.
+  \item The worker thread maintains a \texttt{pending} map keyed by inode.
+  \item Each request resets the fire time to \texttt{now + 500ms}.
+  \item A 100\,ms poll loop checks for expired timers and processes them.
+\end{enumerate}
+
+\subsubsection{Hard-Linking Strategy}
+
+When duplicate content is detected:
+\begin{enumerate}
+  \item The duplicate file's data is backed up.
+  \item The duplicate path is \texttt{unlink()}'d.
+  \item A hard link is created from the duplicate path to the canonical copy.
+  \item The reference count in the forward map is incremented.
+  \item The reverse map is updated with the content hash.
+\end{enumerate}
+
+This is transparent to applications---they see normal files, but the OS reports increased \texttt{nlink} counts.
+
+\subsection{Folder-Level Deduplication (Node Sharing)}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.8cm,
+  dir/.style={rectangle, draw=fastblue, fill=lightblue, rounded corners=3pt, minimum width=2.2cm, minimum height=0.7cm, font=\scriptsize\bfseries, text centered, line width=0.6pt},
+  file/.style={rectangle, draw=fastgreen, fill=lightgreen, rounded corners=2pt, minimum width=1.8cm, minimum height=0.6cm, font=\scriptsize, text centered, line width=0.5pt},
+]
+
+% Before dedup
+\node[font=\small\bfseries] at (-1, 2) {Before Node Sharing};
+
+\node[dir] (p1nm) at (-2, 1) {proj1/lodash};
+\node[file, below left=0.5cm and -0.3cm of p1nm] (p1f1) {index.js};
+\node[file, below right=0.5cm and -0.3cm of p1nm] (p1f2) {lodash.js};
+\draw[arrow] (p1nm) -- (p1f1);
+\draw[arrow] (p1nm) -- (p1f2);
+
+\node[dir] (p2nm) at (2.5, 1) {proj2/lodash};
+\node[file, below left=0.5cm and -0.3cm of p2nm] (p2f1) {index.js};
+\node[file, below right=0.5cm and -0.3cm of p2nm] (p2f2) {lodash.js};
+\draw[arrow] (p2nm) -- (p2f1);
+\draw[arrow] (p2nm) -- (p2f2);
+
+% After dedup
+\node[font=\small\bfseries] at (8.5, 2) {After Node Sharing};
+
+\node[dir] (ap1) at (7, 1) {proj1/lodash};
+\node[dir, fill=lightpurple, draw=fastpurple] (ap2) at (10, 1) {proj2/lodash};
+\node[file, below=0.8cm of ap1, xshift=0.8cm] (sf1) {index.js};
+\node[file, right=0.3cm of sf1] (sf2) {lodash.js};
+
+\draw[arrow, fastblue] (ap1) -- (sf1);
+\draw[arrow] (ap1) -- (sf2);
+\draw[arrow, fastpurple, thick] (ap2) -- (sf1) node[midway, right, font=\scriptsize]{shared\\firstchild};
+
+\node[font=\scriptsize, fastpurple] at (10, 0) {is\_deduped = true};
+\node[font=\scriptsize, fastblue] at (7, 0) {refcount = 2};
+
+\end{tikzpicture}
+\caption{Folder-level node sharing: \texttt{proj2/lodash} shares \texttt{proj1/lodash}'s child chain. Both directories point to the same \texttt{firstchild}. On write, copy-on-write breaks the sharing.}
+\label{fig:nodesharing}
+\end{figure}
+
+\subsubsection{Folder Signature Computation}
+
+A folder's signature is a SHA-256 hash of its recursive contents:
+
+\begin{enumerate}
+  \item Collect all files recursively with relative paths, sizes, and content hashes.
+  \item Sort the list lexicographically for deterministic ordering.
+  \item Concatenate as \texttt{relative\_path|size|hash} lines.
+  \item Compute SHA-256 of the concatenated string.
+\end{enumerate}
+
+\subsubsection{Library Catalog}
+
+A runtime \texttt{unordered\_map<string, int>} maps folder signatures to canonical folder indices. When a library folder's signature matches an existing entry:
+
+\begin{enumerate}
+  \item \texttt{dedup\_link(target, canonical)} is called.
+  \item The target's existing children are freed.
+  \item \texttt{target.firstchild} is set to \texttt{canonical.firstchild} (shared).
+  \item \texttt{target.is\_deduped = true}, \texttt{canonical.dedup\_refcount++}.
+\end{enumerate}
+
+Ancestor/descendant guards prevent cycles (e.g., preventing \texttt{/proj/node\_modules} from sharing with its own subdirectory).
+
+\subsection{Copy-on-Write (CoW) Semantics}
+
+When a file inside a shared (deduped) directory is modified, the sharing must be broken:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.6cm,
+  step/.style={rectangle, draw=fastblue, fill=lightblue, rounded corners=3pt, minimum width=8cm, minimum height=0.7cm, font=\small, text centered, line width=0.6pt},
+]
+
+\node[step] (s1) {1. Detect write to shared file (\texttt{is\_file\_shared(ino)} returns true)};
+\node[step, below=of s1] (s2) {2. Read current file contents via open fd};
+\node[step, below=of s2] (s3) {3. Create temporary file with private copy of data};
+\node[step, below=of s3] (s4) {4. Unlink the hard-link, rename temp $\to$ original path};
+\node[step, below=of s4] (s5) {5. Reopen fd to point to the new private copy};
+\node[step, below=of s5] (s6) {6. Decrement refcount; if original goes to 0, remove entry};
+
+\draw[arrow] (s1) -- (s2);
+\draw[arrow] (s2) -- (s3);
+\draw[arrow] (s3) -- (s4);
+\draw[arrow] (s4) -- (s5);
+\draw[arrow] (s5) -- (s6);
+
+\end{tikzpicture}
+\caption{File-level CoW break process for hard-linked files.}
+\label{fig:cow-break}
+\end{figure}
+
+For \textbf{folder-level CoW} (when creating or deleting a file inside a deduped directory):
+
+\begin{enumerate}
+  \item Detect \texttt{parent.is\_deduped == true}.
+  \item Call \texttt{dedup\_break(parent\_idx)}: shallow-copy the child chain.
+  \item Allocate new \texttt{treenode} for each child, update paths and hash map entries.
+  \item Point \texttt{parent.firstchild} to the new private chain.
+  \item Decrement the canonical's \texttt{dedup\_refcount}.
+  \item The original canonical's chain remains shared with other aliases.
+\end{enumerate}
+
+\subsection{Dedup Policy System}
+
+The dedup engine supports four runtime-configurable policies:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Policy} & \textbf{Behaviour} \\
+\midrule
+\texttt{DEDUP\_ALL} & Dedup both user files and libraries (default) \\
+\texttt{DEDUP\_USER\_ONLY} & Dedup user files only, skip libraries \\
+\texttt{DEDUP\_LIBRARY\_ONLY} & Dedup libraries only, skip user files \\
+\texttt{DEDUP\_NONE} & Disable deduplication entirely \\
+\bottomrule
+\end{tabular}
+\caption{Dedup policies configurable via CLI at runtime.}
+\end{table}
+
+Policies can be changed at runtime via the CLI tool (\texttt{fastdevfs-cli config set dedup\_enabled false}) without restarting the daemon, thanks to the IPC system.
+
+% ============================================================
+% 7. TWO-TIER LIBRARY DETECTION
+% ============================================================
+\section{Two-Tier Library Detection}
+
+FastDevFS uses an intelligent two-tier system to classify directories as ``library'' or ``user code''. This classification drives deduplication priority and policy gating.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=0.8cm,
+  stage/.style={rectangle, draw=fastblue, fill=lightblue, rounded corners=3pt, minimum width=4cm, minimum height=0.8cm, font=\small\bfseries, text centered, line width=0.6pt},
+  decision/.style={diamond, draw=fastorange, fill=lightorange, minimum width=2cm, aspect=2, font=\small\bfseries, text centered, line width=0.6pt, inner sep=1pt},
+  result/.style={rectangle, draw=fastgreen, fill=lightgreen, rounded corners=3pt, minimum width=3cm, minimum height=0.7cm, font=\small\bfseries, text centered, line width=0.6pt},
+]
+
+\node[stage] (input) {Directory path};
+\node[stage, below=of input] (extract) {Extract library name\\(handle scoped: \texttt{@babel/core})};
+\node[decision, below=0.8cm of extract] (tier1) {Tier 1:\\Binary search\\in 595+ libs?};
+\node[result, below left=1cm and 1cm of tier1] (found) {Library\\detected};
+\node[decision, below right=1cm and 1cm of tier1] (tier2) {Tier 2:\\MLP predicts\\library?};
+\node[result, below left=1cm and 0.5cm of tier2] (mlpyes) {Library\\+ append to JSON};
+\node[result, below right=1cm and 0.5cm of tier2] (mlpno) {Not a\\library};
+
+\draw[arrow] (input) -- (extract);
+\draw[arrow] (extract) -- (tier1);
+\draw[arrow] (tier1) -- node[left, font=\scriptsize]{Yes} (found);
+\draw[arrow] (tier1) -- node[right, font=\scriptsize]{No} (tier2);
+\draw[arrow] (tier2) -- node[left, font=\scriptsize]{Yes} (mlpyes);
+\draw[arrow] (tier2) -- node[right, font=\scriptsize]{No} (mlpno);
+
+% Self-learning arrow
+\draw[-{Stealth}, fastpurple, thick, dashed] (mlpyes.south) -- ++(0,-0.5) -| ([xshift=-1.5cm]tier1.west) -- (tier1.west) node[above, font=\scriptsize\itshape, xshift=-0.8cm]{auto-append};
+
+\end{tikzpicture}
+\caption{Two-tier library detection with self-learning: Tier 2 discoveries are auto-appended to the Tier 1 JSON for future $O(\log n)$ lookups.}
+\label{fig:library-detection}
+\end{figure}
+
+\subsection{Tier 1: Binary Search ($O(\log n)$)}
+
+A sorted vector of 595+ known library names (loaded from \texttt{tracked\_libraries.json}) is searched using \texttt{std::binary\_search}. This covers:
+
+\begin{itemize}
+  \item \textbf{Node.js:} React, Express, Webpack, Babel, TypeScript, etc.
+  \item \textbf{Python:} Django, Flask, NumPy, TensorFlow, etc.
+  \item \textbf{Rust:} Serde, Tokio, Actix-web, etc.
+  \item \textbf{Ruby:} Rails, Sinatra, Devise, etc.
+  \item \textbf{Go:} Gin, Echo, GORM, etc.
+  \item \textbf{And 300+ more} across PHP, Java, and other ecosystems.
+\end{itemize}
+
+Name extraction handles scoped packages: for \texttt{/node\_modules/@babel/core}, the extracted name is \texttt{@babel/core}.
+
+\subsection{Tier 2: MLP Neural Network Predictor ($\sim$100\,$\mu$s)}
+
+When Tier 1 fails, a 4-layer multi-layer perceptron (MLP) with 5,042 input features makes the classification.
+
+\subsubsection{Model Architecture}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  layer/.style={rectangle, draw=fastblue, fill=lightblue, rounded corners=3pt, minimum width=2.5cm, minimum height=0.6cm, font=\scriptsize\bfseries, text centered, line width=0.6pt},
+  node distance=0.5cm,
+]
+
+\node[layer, minimum width=5cm] (input) {Input Layer: 5,042 features};
+\node[layer, below=of input] (h1) {Hidden 1: 512 units + ReLU};
+\node[layer, below=of h1] (h2) {Hidden 2: 256 units + ReLU};
+\node[layer, below=of h2] (h3) {Hidden 3: 128 units + ReLU};
+\node[layer, below=of h3] (h4) {Hidden 4: 64 units + ReLU};
+\node[layer, fill=lightgreen, draw=fastgreen, below=of h4] (output) {Output: 1 neuron + Sigmoid $\to [0,1]$};
+
+\draw[arrow] (input) -- (h1);
+\draw[arrow] (h1) -- (h2);
+\draw[arrow] (h2) -- (h3);
+\draw[arrow] (h3) -- (h4);
+\draw[arrow] (h4) -- (output);
+
+% Feature breakdown
+\node[rectangle, draw=gray, fill=gray!5, rounded corners=2pt, minimum width=4cm, font=\scriptsize, text width=3.8cm, align=left, right=1.5cm of input] (features) {
+  \textbf{42} hand-crafted features\\
+  \textbf{3,000} token TF-IDF\\
+  \textbf{2,000} char 3-gram TF-IDF
+};
+\draw[dasharrow, gray] (features.west) -- (input.east);
+
+\end{tikzpicture}
+\caption{MLP predictor architecture. The sparse input optimisation skips zero-valued features, achieving $\sim$10--20$\times$ speedup over dense matrix multiplication.}
+\label{fig:mlp}
+\end{figure}
+
+\subsubsection{42 Hand-Crafted Features}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lp{8cm}}
+\toprule
+\textbf{Category} & \textbf{Features} \\
+\midrule
+Structural (6) & path\_length, depth, num\_segments, last\_segment\_length, avg\_segment\_length, num\_tokens \\
+Character counts (6) & hyphens, underscores, dots, slashes, digits, uppercase \\
+Ratios (2) & digit\_ratio, hyphen\_ratio \\
+Pattern flags (9) & starts\_with\_dot/at, has\_at\_sign, is\_scoped\_npm, has\_version, ends\_with\_digits, etc. \\
+Semantic tokens (8) & lib\_token\_hits, nonlib\_token\_hits, ratios, has\_lib\_segment, has\_nonlib\_segment \\
+High-signal (7) & contains ``node\_modules'', ``site-packages'', ``vendor'', ``venv'', ``\_\_pycache\_\_'', etc. \\
+Advanced (8) & known\_scope, lib\_suffix/prefix, nonlib\_prefix, numbered\_suffix, workflow\_token, date\_pattern \\
+\bottomrule
+\end{tabular}
+\caption{42 hand-crafted features for the MLP predictor.}
+\end{table}
+
+\subsubsection{Self-Learning Mechanism}
+
+When Tier 2 classifies a new library, it automatically:
+\begin{enumerate}
+  \item Inserts the library name into the sorted \texttt{g\_tracked\_libraries} vector.
+  \item Atomically appends the name to \texttt{tracked\_libraries.json} (write to \texttt{.tmp} then \texttt{rename()}).
+  \item Future lookups for this library use Tier 1 ($O(\log n)$) instead of Tier 2 ($\sim$100\,$\mu$s).
+\end{enumerate}
+
+% ============================================================
+% 8. FUSE INTEGRATION (LOW-LEVEL API)
+% ============================================================
+\section{FUSE Integration}
+
+\subsection{Migration from High-Level to Low-Level FUSE API}
+\label{sec:fuse-migration}
+
+A significant post-mid-evaluation change was the migration from \texttt{fuse3/fuse.h} (high-level API) to \texttt{fuse3/fuse\_lowlevel.h} (low-level API).
+
+\subsubsection{Why the Migration Was Necessary}
+
+The high-level FUSE API resolves paths at every operation:
+$$\text{High-level: } \texttt{getattr("/a/b/c/d")} \to \text{kernel resolves each component}$$
+
+This means the kernel performs a \texttt{lookup()} call for \textit{each} path component, resulting in $O(d)$ kernel$\leftrightarrow$userspace round trips for a path of depth $d$. With FastDevFS already maintaining its own $O(1)$ hash-based lookup, these redundant kernel lookups represented pure overhead.
+
+The low-level API operates on \textbf{inodes} (numeric identifiers):
+$$\text{Low-level: } \texttt{ll\_getattr(ino=42)} \to \text{direct array index: } \texttt{arr[42-1]}$$
+
+\subsubsection{Inode Mapping}
+
+FUSE reserves inode 0 as invalid and uses inode 1 (\texttt{FUSE\_ROOT\_ID}) for the root. FastDevFS maps:
+$$\text{inode} = \text{tree\_index} + 1 \qquad \text{tree\_index} = \text{inode} - 1$$
+
+This eliminates all path resolution overhead. The kernel caches inode-to-name mappings, so repeated accesses to the same file skip the lookup entirely.
+
+\subsubsection{Hash Overhead Elimination}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{API Level} & \textbf{Path Resolution} & \textbf{Cost per \texttt{stat()}} \\
+\midrule
+High-level & Kernel resolves full path each time & $O(d)$ lookups ($d$ = depth) \\
+Low-level  & Kernel caches inodes & $O(1)$ array index \\
+\bottomrule
+\end{tabular}
+\caption{Comparison of high-level vs.\ low-level FUSE API overhead.}
+\end{table}
+
+\subsection{Implemented Low-Level FUSE Operations}
+
+FastDevFS implements 17 low-level FUSE callbacks:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{Operation} & \textbf{Complexity} & \textbf{Description} \\
+\midrule
+\texttt{ll\_init} & $O(1)$ & Create host data directory \\
+\texttt{ll\_destroy} & $O(1)$ & Cleanup (sync handled in \texttt{main}) \\
+\texttt{ll\_lookup} & $O(1)$ & Find child by name under parent inode \\
+\texttt{ll\_forget} & $O(1)$ & Release kernel inode reference \\
+\texttt{ll\_getattr} & $O(1)$ & Return file/dir metadata from tree \\
+\texttt{ll\_setattr} & $O(1)$ & Update attributes, CoW break if shared \\
+\texttt{ll\_mkdir} & $O(1)$ & Create directory + notify dedup worker \\
+\texttt{ll\_unlink} & $O(1)$ & Delete file, CoW break parent if deduped \\
+\texttt{ll\_rmdir} & $O(1)$ & Remove empty directory, update refcounts \\
+\texttt{ll\_create} & $O(1)$ & Create file + host data + dedup notify \\
+\texttt{ll\_open} & $O(1)$ & Open host data file, CoW break on truncate \\
+\texttt{ll\_release} & $O(1)$ & Close file descriptor \\
+\texttt{ll\_read} & $O(s)$ & Read $s$ bytes via \texttt{pread()} \\
+\texttt{ll\_write} & $O(s)$ & Write $s$ bytes via \texttt{pwrite()}, CoW break \\
+\texttt{ll\_readdir} & $O(n)$ & List directory children \\
+\texttt{ll\_statfs} & $O(1)$ & Return filesystem statistics \\
+\texttt{ll\_rename} & $O(1)$ & Move/rename with $O(1)$ sibling unlink \\
+\bottomrule
+\end{tabular}
+\caption{All 17 implemented low-level FUSE operations with complexities.}
+\end{table}
+
+% ============================================================
+% 9. IPC SYSTEM AND CLI TOOL
+% ============================================================
+\section{IPC System and CLI Tool}
+
+\subsection{Why Unix Domain Sockets for IPC}
+
+FastDevFS uses \texttt{AF\_UNIX SOCK\_STREAM} sockets for inter-process communication between the daemon and the CLI tool. This design was chosen over alternatives for specific technical reasons:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=1cm,
+  box/.style={rectangle, draw=fastblue, fill=lightblue, rounded corners=3pt, minimum width=3.5cm, minimum height=1.2cm, font=\small\bfseries, text centered, line width=0.6pt},
+]
+
+\node[box, fill=lightgreen, draw=fastgreen] (daemon) {FastDevFS Daemon\\{\scriptsize PID: running}};
+\node[box, fill=lightpurple, draw=fastpurple, right=4cm of daemon] (cli) {CLI Tool\\{\scriptsize \texttt{fastdevfs-cli}}};
+
+% Socket
+\node[rectangle, draw=fastorange, fill=lightorange, rounded corners=2pt, minimum width=3.5cm, minimum height=0.7cm, font=\scriptsize\bfseries, below=1cm of $(daemon)!0.5!(cli)$] (socket) {Unix Domain Socket\\{\tiny \texttt{/tmp/fastdevfs\_cli.sock}}};
+
+% Arrows
+\draw[arrow, fastpurple, thick] (cli.south) -- ++(0,-0.3) -| (socket.east) node[midway, right, font=\scriptsize]{JSON request};
+\draw[arrow, fastgreen, thick] (daemon.south) -- ++(0,-0.3) -| (socket.west) node[midway, left, font=\scriptsize]{JSON response};
+
+% Protocol label
+\node[font=\scriptsize, below=0.3cm of socket] {Protocol: JSON over stream socket};
+
+% Dedup socket
+\node[rectangle, draw=fastorange, fill=lightorange!50, rounded corners=2pt, minimum width=3cm, minimum height=0.5cm, font=\scriptsize, below=2cm of daemon] (dsock) {Dedup Socket (DGRAM)\\{\tiny \texttt{/tmp/fastdevfs\_dedup.sock}}};
+\draw[dasharrow, gray] (daemon.south) -- (dsock.north) node[midway, right, font=\scriptsize]{internal};
+
+\end{tikzpicture}
+\caption{IPC architecture: the CLI communicates with the daemon over a Unix domain socket using a JSON protocol. A separate datagram socket is used internally for dedup requests.}
+\label{fig:ipc}
+\end{figure}
+
+\subsubsection{Advantages Over Alternatives}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lp{4cm}p{4cm}}
+\toprule
+\textbf{IPC Method} & \textbf{Limitation} & \textbf{Unix Socket Advantage} \\
+\midrule
+Shared memory & No notification mechanism; requires polling & Bidirectional, event-driven communication \\
+Named pipes (FIFO) & Unidirectional; complex for request-response & Full-duplex stream \\
+Signals & Extremely limited data capacity & Arbitrary-size JSON payloads \\
+D-Bus & Heavy dependency, overkill for simple commands & Zero external dependencies \\
+TCP sockets & Network overhead, security exposure & Kernel-only, no network stack, filesystem permissions \\
+\bottomrule
+\end{tabular}
+\caption{Why Unix domain sockets were chosen over other IPC mechanisms.}
+\end{table}
+
+\subsection{The Need for IPC: Live Configuration Updates}
+
+A key motivator for the IPC system is \textbf{live configuration updates without daemon restart}:
+
+\begin{itemize}
+  \item \textbf{Change dedup policy:} Switch between \texttt{ALL}/\texttt{USER\_ONLY}/\texttt{LIBRARY\_ONLY}/\texttt{NONE} while the filesystem is mounted.
+  \item \textbf{Toggle dedup:} Enable/disable deduplication at runtime.
+  \item \textbf{Adjust log level:} Change from \texttt{info} to \texttt{debug} for troubleshooting.
+  \item \textbf{Update data paths:} Reconfigure storage directories.
+  \item \textbf{Query statistics:} Get real-time dedup statistics without unmounting.
+  \item \textbf{Trigger dedup passes:} Run a full filesystem scan on demand.
+\end{itemize}
+
+Without IPC, each configuration change would require unmounting the filesystem, modifying the config file, and remounting---disrupting all applications using the mount.
+
+\subsection{IPC Protocol}
+
+The protocol uses JSON messages over a stream connection with the following commands:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{llp{5cm}}
+\toprule
+\textbf{Command} & \textbf{Direction} & \textbf{Description} \\
+\midrule
+\texttt{ping} & CLI $\to$ Daemon & Health check; response: \texttt{"pong"} \\
+\texttt{status} & CLI $\to$ Daemon & Returns PID, mountpoint, dedup enabled, log level \\
+\texttt{config\_get [key]} & CLI $\to$ Daemon & Get all config (pipe-delimited) or a single value \\
+\texttt{config\_update k=v} & CLI $\to$ Daemon & Update config at runtime + persist to disk \\
+\texttt{stop} & CLI $\to$ Daemon & Graceful shutdown (sends \texttt{SIGTERM} to self) \\
+\texttt{dedup\_run} & CLI $\to$ Daemon & Trigger full filesystem dedup pass with progress streaming \\
+\texttt{dedup\_stats} & CLI $\to$ Daemon & Return total duplicates, bytes saved, file list \\
+\bottomrule
+\end{tabular}
+\caption{IPC protocol commands.}
+\end{table}
+
+Timeouts: client read = 3000\,ms, server poll = 200\,ms.
+
+\subsection{CLI Tool (\texttt{fastdevfs-cli})}
+
+The CLI tool provides administrative and diagnostic capabilities for managing the daemon. Built with CLI11 for argument parsing.
+
+\subsubsection{Command Overview}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{llp{5cm}}
+\toprule
+\textbf{Command} & \textbf{Arguments} & \textbf{Description} \\
+\midrule
+\texttt{start} & \texttt{-{}-mountpoint PATH} & Start the daemon, resolve binary path from \texttt{/proc/self/exe} \\
+\texttt{stop} & & Send stop command via IPC, clean up stale files \\
+\texttt{status} & & Display daemon status (PID, mountpoint, dedup state) \\
+\texttt{config get} & \texttt{[KEY]} & Read all or specific config values \\
+\texttt{config set} & \texttt{KEY VALUE} & Update config + persist at runtime \\
+\texttt{dedup run} & & Trigger full dedup pass, stream progress \\
+\texttt{dedup stats} & & Show dedup statistics \\
+\texttt{mount} & \texttt{PATH} & Alias for \texttt{start -{}-mountpoint} \\
+\texttt{unmount} & & Alias for \texttt{stop} \\
+\bottomrule
+\end{tabular}
+\caption{CLI tool commands.}
+\end{table}
+
+\subsubsection{Daemon Resolution Logic}
+
+When \texttt{fastdevfs-cli start} is invoked, it locates the daemon binary by:
+\begin{enumerate}
+  \item Resolving its own path via \texttt{/proc/self/exe}.
+  \item Searching the same directory for \texttt{fastdevfs}.
+  \item Fallback: \texttt{./build/fastdevfs}, then \texttt{./fastdevfs}.
+\end{enumerate}
+
+Stale state cleanup: checks PID file and pings the socket; removes dead artifacts.
+
+\subsection{Configuration System}
+
+\begin{lstlisting}[caption={Configuration structure with defaults.}]
+struct FastDevFsConfig {
+    string data_dir     = "/tmp/fastdevfs_data";
+    string persist_path = "/tmp/fastdevfs.mmap";
+    string dedup_path   = "/tmp/fastdevfs_dedup.mmap";
+    string socket_path  = "/tmp/fastdevfs_cli.sock";
+    string pid_path     = "/tmp/fastdevfs.pid";
+    bool   dedup_enabled = true;
+    string hash_algorithm = "sha256";
+    int    chunk_size   = 4096;
+    string log_level    = "info";
+    int    max_threads  = 4;
+};
+\end{lstlisting}
+
+Configuration is loaded from an INI file, with a global mutex protecting concurrent access. Updates via IPC are immediately persisted to disk.
+
+% ============================================================
+% 10. DELIVERABLES
+% ============================================================
+\section{Deliverables}
+
+The following deliverables were completed:
+
+\begin{enumerate}
+  \item \textbf{FastDevFS Daemon Binary} (\texttt{fastdevfs}): A compiled C++17 executable that mounts the virtual filesystem using low-level FUSE3 API. Includes content deduplication, folder-level node sharing, two-tier library detection, and mmap-backed persistence.
+
+  \item \textbf{CLI Tool Binary} (\texttt{fastdevfs-cli}): A standalone command-line tool for daemon management, live configuration updates, dedup operations, and statistics querying via Unix domain socket IPC.
+
+  \item \textbf{Source Code}: A clean, well-commented C++ project ($\sim$6,700 LOC) managed with CMake, structured into static libraries (\texttt{fastdevfs\_adt}, \texttt{fastdevfs\_common}, \texttt{library\_predictor}).
+
+  \item \textbf{Test Suite}: 6 unit test executables using GoogleTest:
+    \begin{itemize}
+      \item \texttt{test\_adt}: Tree operations (insert, delete, move, parent change)
+      \item \texttt{test\_hash}: Hash map (linear probing, rehashing, collision handling)
+      \item \texttt{test\_persistence}: mmap I/O (save/load, corruption detection via magic numbers)
+      \item \texttt{test\_node\_share}: Folder dedup (\texttt{dedup\_link}, \texttt{dedup\_break})
+      \item \texttt{test\_library\_detection}: 33 tests for two-tier library detection
+      \item \texttt{test\_predictor}: MLP inference (feature extraction, forward pass, throughput)
+    \end{itemize}
+
+  \item \textbf{Documentation}: Complete documentation including \texttt{README.md}, \texttt{ALGORITHMS.md}, \texttt{CLI\_DESIGN.md}, \texttt{CONCEPTS.md}, \texttt{LOCKS.md}, and \texttt{TESTS.md}.
+
+  \item \textbf{MLP Model}: Trained 4-layer neural network with 5,042 features, shipped as a binary parameter file (\texttt{model\_params.bin}) with zero external ML dependencies.
+\end{enumerate}
+
+% ============================================================
+% 11. PROGRESS POST MID-EVALUATION
+% ============================================================
+\section{Progress Post Mid-Evaluation}
+
+The mid-evaluation report covered the foundational architecture: mmap-backed directory tree, polynomial hash table, FUSE integration (high-level API), and core POSIX operations. The following sections detail all work completed after the mid-evaluation.
+
+\subsection{Migration from High-Level to Low-Level FUSE API}
+
+The most architecturally significant change was the complete rewrite of FUSE callbacks from the high-level path-based API to the low-level inode-based API (see Section~\ref{sec:fuse-migration}).
+
+\textbf{Key benefits realised:}
+\begin{itemize}
+  \item \textbf{Eliminated redundant path resolution:} The kernel no longer re-resolves the full path for every operation. With the high-level API, a \texttt{stat("/a/b/c/d/e")} required 5 separate lookup calls. With the low-level API, the kernel caches the inode after the first resolution.
+  \item \textbf{Mitigated hash overhead:} Previously, every FUSE callback received a path string and had to hash it through the polynomial hash table. Now, callbacks receive an inode number which maps directly to \texttt{arr[ino - 1]} ($O(1)$ array indexing).
+  \item \textbf{$O(1)$ for most file operations:} \texttt{getattr}, \texttt{setattr}, \texttt{open}, \texttt{read}, \texttt{write}, \texttt{create}, \texttt{mkdir}, \texttt{unlink}, \texttt{rmdir}, \texttt{rename} --- all operate in $O(1)$ amortised time.
+\end{itemize}
+
+\subsection{Deduplication Engine}
+
+A complete content-aware deduplication engine was built from scratch:
+
+\begin{itemize}
+  \item \textbf{File-level dedup:} SHA-256 content hashing with 500\,ms debounce, hard-linking to canonical copy, automatic refcount management.
+  \item \textbf{Folder-level dedup:} Recursive folder signatures, node-sharing via \texttt{dedup\_link()}, library catalog persistence.
+  \item \textbf{Copy-on-Write:} Transparent CoW break on both file writes (hard-link split) and directory mutations (child chain copy).
+  \item \textbf{Persistent dedup index:} mmap-backed dual-map design with magic-number validation across restarts.
+  \item \textbf{Policy system:} Four configurable policies (ALL, USER\_ONLY, LIBRARY\_ONLY, NONE) changeable at runtime.
+\end{itemize}
+
+\subsection{CLI Tool}
+
+A full-featured command-line interface was developed:
+
+\begin{itemize}
+  \item \textbf{Daemon lifecycle:} \texttt{start}, \texttt{stop}, \texttt{status} commands with PID file management and stale state cleanup.
+  \item \textbf{Live configuration:} \texttt{config get}/\texttt{config set} with runtime updates persisted to disk.
+  \item \textbf{Dedup operations:} \texttt{dedup run} triggers a full scan with progress streaming; \texttt{dedup stats} reports duplicates found and bytes saved.
+  \item \textbf{Formatted output:} ANSI colours, Unicode symbols (with ASCII fallback), formatted key-value displays, and progress indicators.
+  \item \textbf{Built with CLI11:} Automatic help generation, subcommand structure, no manual argument parsing.
+\end{itemize}
+
+\subsection{Two-Tier Library Detection with MLP Predictor}
+
+\begin{itemize}
+  \item \textbf{Tier 1:} Loaded 595+ known libraries from \texttt{tracked\_libraries.json} into a sorted vector for $O(\log n)$ binary search.
+  \item \textbf{Tier 2:} Implemented a 4-layer MLP neural network (512$\to$256$\to$128$\to$64$\to$1) with:
+    \begin{itemize}
+      \item 42 hand-crafted features (structural, lexical, semantic)
+      \item 3,000 token TF-IDF features (unigrams + bigrams, sublinear TF)
+      \item 2,000 char 3-gram TF-IDF features
+      \item Sparse input optimisation ($\sim$10--20$\times$ speedup)
+      \item Self-learning: auto-appends to JSON on new discoveries
+    \end{itemize}
+  \item \textbf{Zero ML dependencies:} No TensorFlow, PyTorch, or ONNX---pure C++ inference in $\sim$1,500 LOC.
+\end{itemize}
+
+\subsection{Optimisations in Core Operations}
+
+\begin{itemize}
+  \item \textbf{Binary search for library detection:} Replaced linear scanning with sorted vector + \texttt{std::binary\_search} ($O(n) \to O(\log n)$).
+  \item \textbf{Doubly-linked sibling list:} Added \texttt{prevsibling} pointer for $O(1)$ node unlinking (previously $O(n)$ scan to find predecessor).
+  \item \textbf{FNV-1a for dedup probing:} Separate hash function for the dedup index to reduce collision clustering.
+  \item \textbf{Sparse matrix multiplication:} Skip zero-valued features in the first MLP layer (5,042 inputs, typically only $\sim$50 non-zero).
+  \item \textbf{Direct-array reverse map:} $O(1)$ tree-index-to-hash lookup via flat array indexed by tree index.
+\end{itemize}
+
+\subsection{Unix Domain Socket IPC}
+
+Implemented a complete IPC layer for daemon-CLI communication:
+
+\begin{itemize}
+  \item \textbf{JSON protocol:} Structured request/response over stream sockets.
+  \item \textbf{Thread-safe:} Server runs on a dedicated thread with poll-based accept loop (200\,ms timeout).
+  \item \textbf{Commands:} \texttt{ping}, \texttt{status}, \texttt{config\_get}, \texttt{config\_update}, \texttt{stop}, \texttt{dedup\_run}, \texttt{dedup\_stats}.
+  \item \textbf{Graceful shutdown:} \texttt{stop} command sends \texttt{SIGTERM}; server thread checks shutdown flag.
+  \item \textbf{Stale state detection:} CLI cleans up dead PID files and socket files on startup.
+\end{itemize}
+
+% ============================================================
+% 12. TESTING AND VALIDATION
+% ============================================================
+\section{Testing and Validation}
+
+\subsection{Test Environment}
+
+\begin{itemize}
+  \item \textbf{OS:} Linux (Ubuntu-based system)
+  \item \textbf{Compiler:} GCC with CMake build system (C++17)
+  \item \textbf{FUSE version:} 3.x (\texttt{libfuse3-dev})
+  \item \textbf{Testing Framework:} GoogleTest v1.14.0 (fetched via CMake \texttt{FetchContent})
+\end{itemize}
+
+\subsection{Test Suite Summary}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{Test Executable} & \textbf{Tests} & \textbf{Coverage} \\
+\midrule
+\texttt{test\_adt} & Tree ADT & Insert, delete, move, parent change, free list \\
+\texttt{test\_hash} & Hash map & Linear probing, rehashing, collision handling \\
+\texttt{test\_persistence} & mmap I/O & Save/load, magic number, corruption detection \\
+\texttt{test\_node\_share} & Folder dedup & \texttt{dedup\_link}, \texttt{dedup\_break}, refcount \\
+\texttt{test\_library\_detection} & 33 tests & Tier 1 binary search, Tier 2 MLP, scoped packages, concurrent access \\
+\texttt{test\_predictor} & MLP inference & Feature extraction, forward pass, throughput benchmarking \\
+\bottomrule
+\end{tabular}
+\caption{Test suite with 6 executables, all passing (6/6).}
+\end{table}
+
+\subsection{Validation Outcome}
+
+All 6 test executables pass consistently. The tests confirm:
+\begin{itemize}
+  \item Core filesystem operations work correctly.
+  \item The directed tree structure updates as expected.
+  \item Metadata persists across remounts using the memory-mapped file.
+  \item The magic number mechanism correctly distinguishes between fresh initialisation and existing filesystem state.
+  \item Two-tier library detection classifies libraries accurately.
+  \item Node sharing and CoW break maintain data consistency.
+  \item The MLP predictor achieves sufficient throughput for real-time classification.
+\end{itemize}
+
+% ============================================================
+% 13. FUTURE PLANS
+% ============================================================
+\section{Future Plans}
+
+With the deduplication engine, CLI tool, and MLP library detection now fully implemented, the remaining planned enhancements are:
+
+\subsection{Blob Store Directory Structure}
+
+The next major milestone is introducing a structured content-addressable blob store. Instead of storing file contents by their tree array index, FastDevFS will store data based on content hash.
+
+The blob store will:
+\begin{itemize}
+  \item Organise blobs using hash-prefix partitioning to prevent directory explosion.
+  \item Physically store identical file contents only once (replacing the current hard-link approach).
+  \item Maintain reference counters for shared blobs.
+  \item Enable garbage collection of unused data blocks.
+\end{itemize}
+
+\subsection{Performance Benchmarking Suite}
+
+A comprehensive benchmarking framework to measure:
+\begin{itemize}
+  \item Disk space savings across Node.js, Python, Rust, and C++ projects.
+  \item Build time improvements with and without FastDevFS.
+  \item \texttt{stat()} call latency compared to ext4 and Btrfs.
+  \item Dedup throughput (files processed per second).
+\end{itemize}
+
+\subsection{Extended FUSE Operations}
+
+Additional POSIX operations to improve compatibility:
+\begin{itemize}
+  \item \texttt{symlink}/\texttt{readlink}: Symbolic link support.
+  \item \texttt{link}: Hard link exposure to userspace.
+  \item \texttt{xattr}: Extended attributes for metadata extensions.
+  \item \texttt{fallocate}: Pre-allocation support for large files.
+\end{itemize}
+
+% ============================================================
+% 14. CONCLUSION
+% ============================================================
+\section{Conclusion}
+
+FastDevFS has been successfully engineered from a foundational metadata layer into a fully functional deduplicating development filesystem. The project now includes:
+
+\begin{enumerate}
+  \item A \textbf{low-level FUSE3 daemon} with 17 implemented callbacks, achieving $O(1)$ amortised time for all core operations via inode-based addressing and polynomial hash lookup.
+
+  \item A \textbf{content-aware deduplication engine} with SHA-256 hashing, hard-link-based file dedup with debounced detection, and folder-level node sharing with transparent copy-on-write semantics.
+
+  \item An \textbf{intelligent two-tier library detection system} combining binary search over 595+ known libraries with an MLP neural network fallback (5,042 features, 4 hidden layers) that self-learns by auto-appending newly discovered libraries.
+
+  \item A \textbf{CLI management tool} with Unix domain socket IPC enabling live configuration updates, on-demand dedup passes with progress streaming, and comprehensive status/statistics reporting---all without requiring daemon restarts.
+
+  \item A robust \textbf{mmap-backed persistence layer} providing zero-copy metadata access, instant mount times via on-demand paging, and automatic OS-managed disk synchronisation.
+
+  \item A comprehensive \textbf{test suite} of 6 executables with 33+ test cases covering the tree ADT, hash table, persistence, node sharing, library detection, and MLP inference.
+\end{enumerate}
+
+The architecture is language-agnostic, working transparently across Node.js, Python, Rust, C++, Go, Ruby, and any other development ecosystem without requiring per-language tooling. FastDevFS is architecturally primed for the next phase: a content-addressable blob store and comprehensive performance benchmarking.
+
+\end{document}
